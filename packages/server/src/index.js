@@ -2,118 +2,64 @@ const { ApolloServer, gql } = require('apollo-server-express')
 // const { ApolloServerPluginDrainHttpServer } = require('apollo-server-core')
 const express = require('express')
 const http = require('http')
-const { execute, subscribe, buildSchema } = require('graphql')
+const { execute, subscribe } = require('graphql')
 const { SubscriptionServer } = require('subscriptions-transport-ws')
-const { makeExecutableSchema } = require('@graphql-tools/schema')
-const { PubSub, withFilter } = require('graphql-subscriptions')
-const ws = require('ws') // yarn add ws
-const { useServer } = require('graphql-ws/lib/use/ws')
+const { makeExecutableSchema, mergeSchemas } = require('@graphql-tools/schema')
+// const ws = require('ws') // yarn add ws
+// const { useServer } = require('graphql-ws/lib/use/ws')
+const { typeDefs } = require('./schemas')
+const { resolvers } = require('./resolvers')
+const { loadSchema } = require('@graphql-tools/load')
+const { UrlLoader } = require('@graphql-tools/url-loader')
 
-const pubsub = new PubSub()
+// const schema = makeExecutableSchema({
+//     typeDefs: mainTypeDefs,
+//     resolvers: mainResolvers,
+// })
+// const schema = mergeSchemas({
+//     schemas: [
+//         makeExecutableSchema({
+//             typeDefs: mainTypeDefs,
+//             resolvers: mainResolvers,
+//         }),
+//         makeExecutableSchema({
+//             typeDefs: messagingSchema,
+//         }),
+//     ],
+// })
 
-const typeDefs = gql`
-    type Book {
-        title: String
-        author: String
+const mainSchema = makeExecutableSchema({
+    typeDefs,
+    resolvers,
+})
+
+const getMessagingSchema = async () => {
+    try {
+        const messagingSchema = await loadSchema(
+            'http://localhost:3011/graphql',
+            {
+                // load from endpoint
+                loaders: [new UrlLoader()],
+            }
+        )
+        return messagingSchema
+    } catch (error) {
+        console.error('Messaging server down')
+        return
     }
-
-    type Query {
-        books: [Book]
-    }
-
-    type Mutation {
-        addBook(title: String, author: String): [Book]
-    }
-
-    type Subscription {
-        booksAdded: [Book]
-    }
-`
-
-const books = [
-    {
-        title: 'The Awakening',
-        author: 'Kate Chopin',
-    },
-    {
-        title: 'City of Glass',
-        author: 'Paul Auster',
-    },
-]
-
-const resolvers = {
-    Query: {
-        books: () => books,
-    },
-    Mutation: {
-        addBook: (_, { title, author }) => {
-            pubsub.publish('POST_CREATED', {
-                title,
-                author,
-            })
-            return [...books, { title, author }]
-        },
-    },
-    Subscription: {
-        booksAdded: {
-            // More on pubsub below
-            subscribe: withFilter(
-                () => pubsub.asyncIterator(['POST_CREATED']),
-                () => true
-            ),
-            resolve: (parent) => [...books, parent],
-        },
-    },
 }
 
-const roots = {
-    query: {
-        books: () => books,
-    },
-    mutation: {
-        addBook: (_, { title, author }) => {
-            pubsub.publish('POST_CREATED', {
-                title,
-                author,
-            })
-            return [...books, { title, author }]
-        },
-    },
-    subscription: {
-        booksAdded: {
-            // More on pubsub below
-            subscribe: withFilter(
-                () => pubsub.asyncIterator(['POST_CREATED']),
-                () => true
-            ),
-            resolve: (parent) => [...books, parent],
-        },
-    },
-}
+const getSchemas = (schemas) => schemas.filter(Boolean)
 
-const schema = makeExecutableSchema({ typeDefs, resolvers })
-const schema1 = buildSchema(`
-type Book {
-    title: String
-    author: String
-}
-
-type Query {
-    books: [Book]
-}
-
-type Mutation {
-    addBook(title: String, author: String): [Book]
-}
-
-type Subscription {
-    booksAdded: [Book]
-}
-`)
-
-async function startApolloServer(typeDefs, resolvers) {
+async function startApolloServer() {
     const app = express()
     const httpServer = http.createServer(app)
+
+    const messagingSchema = await getMessagingSchema()
+
+    const schema = mergeSchemas({
+        schemas: getSchemas([mainSchema, messagingSchema]),
+    })
 
     const server = new ApolloServer({
         schema,
@@ -129,7 +75,7 @@ async function startApolloServer(typeDefs, resolvers) {
             },
         ],
     })
-    console.log(JSON.stringify({ server }))
+
     const subscriptionServer = SubscriptionServer.create(
         {
             schema,
@@ -149,8 +95,52 @@ async function startApolloServer(typeDefs, resolvers) {
     )
     await server.start()
     server.applyMiddleware({ app })
-    await new Promise((resolve) => httpServer.listen({ port: 3000 }, resolve))
-    console.log(`🚀 Server ready at http://localhost:3000${server.graphqlPath}`)
+    await new Promise((resolve) => httpServer.listen({ port: 3010 }, resolve))
+    console.log(`🚀 Server ready at http://localhost:3010${server.graphqlPath}`)
 }
 
-startApolloServer(typeDefs, resolvers)
+startApolloServer()
+
+// const schema1 = buildSchema(`
+// type Book {
+//     title: String
+//     author: String
+// }
+
+// type Query {
+//     books: [Book]
+// }
+
+// type Mutation {
+//     addBook(title: String, author: String): [Book]
+// }
+
+// type Subscription {
+//     booksAdded: [Book]
+// }
+// `)
+
+// const roots = {
+//     query: {
+//         books: () => books,
+//     },
+//     mutation: {
+//         addBook: (_, { title, author }) => {
+//             pubsub.publish('POST_CREATED', {
+//                 title,
+//                 author,
+//             })
+//             return [...books, { title, author }]
+//         },
+//     },
+//     subscription: {
+//         booksAdded: {
+//             // More on pubsub below
+//             subscribe: withFilter(
+//                 () => pubsub.asyncIterator(['POST_CREATED']),
+//                 () => true
+//             ),
+//             resolve: (parent) => [...books, parent],
+//         },
+//     },
+// }

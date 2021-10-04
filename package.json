@@ -3,7 +3,8 @@
     "private": true,
     "scripts": {
         "bs": "lerna bootstrap",
-        "dev:app-server": "lerna run start --scope=server --stream"
+        "dev:app-server": "lerna run start --scope=server --stream",
+        "dev:app-another-server": "lerna run start --scope=another-server --stream"
     },
     "devDependencies": {
         "lerna": "^4.0.0",
