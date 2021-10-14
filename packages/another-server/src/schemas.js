@@ -19,6 +19,10 @@ const typeDefs = gql`
         channels: [Channel]!
     }
 
+    type Mutation {
+        addChannel: Channel!
+    }
+
     type Subscription {
         channelsAccessed: [Channel]!
     }

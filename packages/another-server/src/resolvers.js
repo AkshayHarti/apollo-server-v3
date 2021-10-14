@@ -13,8 +13,19 @@ const resolvers = {
             return channel
         },
         channels: () => {
-            pubsub.publish('CHANNELS_ACCESSED')
             return channels
+        },
+    },
+    Mutation: {
+        addChannel: () => {
+            const channel = {
+                id: channels.length + 1,
+                type: 'PRIVATE_CLIENT_CHANNEL',
+                totalMessages: 54,
+                lastMessageTime: Date.now().toString(),
+            }
+            pubsub.publish('CHANNELS_ACCESSED', channel)
+            return channel
         },
     },
     Subscription: {
@@ -23,7 +34,10 @@ const resolvers = {
                 () => pubsub.asyncIterator(['CHANNELS_ACCESSED']),
                 () => true
             ),
-            resolve: () => channels,
+            resolve: (parent) => {
+                console.log({ parent })
+                return [parent]
+            },
         },
     },
 }

@@ -5,28 +5,75 @@ const http = require('http')
 const { execute, subscribe } = require('graphql')
 const { SubscriptionServer } = require('subscriptions-transport-ws')
 const { makeExecutableSchema, mergeSchemas } = require('@graphql-tools/schema')
+const ws = require('ws')
 // const ws = require('ws') // yarn add ws
 // const { useServer } = require('graphql-ws/lib/use/ws')
 const { typeDefs } = require('./schemas')
 const { resolvers } = require('./resolvers')
 const { loadSchema } = require('@graphql-tools/load')
 const { UrlLoader } = require('@graphql-tools/url-loader')
+const { wrapSchema, introspectSchema } = require('@graphql-tools/wrap')
+const { Executor } = require('@graphql-tools/delegate')
+const { fetch } = require('cross-fetch')
+const { print } = require('graphql')
+const { observableToAsyncIterable } = require('@graphql-tools/utils')
+const { createClient } = require('graphql-ws')
 
-// const schema = makeExecutableSchema({
-//     typeDefs: mainTypeDefs,
-//     resolvers: mainResolvers,
-// })
-// const schema = mergeSchemas({
-//     schemas: [
-//         makeExecutableSchema({
-//             typeDefs: mainTypeDefs,
-//             resolvers: mainResolvers,
-//         }),
-//         makeExecutableSchema({
-//             typeDefs: messagingSchema,
-//         }),
-//     ],
-// })
+const HTTP_GRAPHQL_ENDPOINT = 'http://localhost:3011/graphql'
+const WS_GRAPHQL_ENDPOINT = 'ws://localhost:3011/graphql'
+
+const mainExecutor = async ({ document, variables, context }) => {
+    const query = print(document)
+    const fetchResult = await fetch(HTTP_GRAPHQL_ENDPOINT, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query, variables }),
+    })
+    return fetchResult.json()
+}
+
+const subscriptionClient = createClient({
+    url: WS_GRAPHQL_ENDPOINT,
+})
+
+const subExecutor = ({ document, variables, context }) => {
+    console.log(JSON.stringify({ subscriptionClient }))
+    return observableToAsyncIterable({
+        subscribe: (observer) => ({
+            unsubscribe: subscriptionClient.subscribe(
+                {
+                    query: document,
+                    variables,
+                },
+                {
+                    next: (data) => observer.next && observer.next(data),
+                    error: (err) => {
+                        if (!observer.error) return
+                        if (err instanceof Error) {
+                            observer.error(err)
+                        } else if (err.constructor.name === 'CloseEvent') {
+                            observer.error(
+                                new Error(
+                                    `Socket closed with event ${err.code}`
+                                )
+                            )
+                        } else {
+                            // GraphQLError[]
+                            observer.error(
+                                new Error(
+                                    err.map(({ message }) => message).join(', ')
+                                )
+                            )
+                        }
+                    },
+                    complete: () => observer.complete && observer.complete(),
+                }
+            ),
+        }),
+    })
+}
 
 const mainSchema = makeExecutableSchema({
     typeDefs,
@@ -34,19 +81,30 @@ const mainSchema = makeExecutableSchema({
 })
 
 const getMessagingSchema = async () => {
-    try {
-        const messagingSchema = await loadSchema(
-            'http://localhost:3011/graphql',
-            {
-                // load from endpoint
-                loaders: [new UrlLoader()],
-            }
-        )
-        return messagingSchema
-    } catch (error) {
-        console.error('Messaging server down')
-        return
-    }
+    const schema1 = wrapSchema({
+        schema: await introspectSchema(mainExecutor),
+        executor: mainExecutor,
+    })
+
+    const schema2 = wrapSchema({
+        schema: await introspectSchema(subExecutor),
+        executor: subExecutor,
+    })
+
+    return mergeSchemas({ schemas: [schema1, schema2] })
+    //     try {
+    //         const messagingSchema = await loadSchema(
+    //             ['http://localhost:3011/graphql', 'ws://localhost:3011/graphql'],
+    //             {
+    //                 // load from endpoint
+    //                 loaders: [new UrlLoader()],
+    //             }
+    //         )
+    //         return messagingSchema
+    //     } catch (error) {
+    //         console.error('Messaging server down')
+    //         return
+    //     }
 }
 
 const getSchemas = (schemas) => schemas.filter(Boolean)
