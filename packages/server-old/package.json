@@ -1,0 +1,41 @@
+{
+    "name": "server-old",
+    "version": "1.0.0",
+    "description": "> TODO: description",
+    "author": "akshayharti <akshay.r555@gmail.com>",
+    "homepage": "",
+    "license": "ISC",
+    "main": "lib/server.js",
+    "directories": {
+        "lib": "lib",
+        "test": "__tests__"
+    },
+    "files": [
+        "lib"
+    ],
+    "scripts": {
+        "start": "node  src/index.js",
+        "test": "echo \"Error: run tests from root\" && exit 1"
+    },
+    "dependencies": {
+        "@graphql-tools/schema": "^8.2.0",
+        "@graphql-tools/load": "^7.3.2",
+        "@graphql-tools/url-loader": "^7.2.0",
+        "@graphql-tools/wrap": "^8.1.1",
+        "@graphql-tools/delegate": "^8.2.2",
+        "@graphql-tools/utils": "^8.2.4",
+        "apollo-server-core": "^3.3.0",
+        "apollo-server-express": "^3.3.0",
+        "@apollo/client": "^3.4.16",
+        "cross-fetch": "^3.1.4",
+        "node-fetch": "^2.6.1",
+        "express": "^4.17.1",
+        "graphql": "^15.6.0",
+        "graphql-tools": "3.0.4",
+        "graphql-subscriptions": "^1.2.1",
+        "graphql-ws": "^5.5.0",
+        "nodemon": "^2.0.13",
+        "subscriptions-transport-ws": "^0.9.19",
+        "ws": "^8.2.2"
+    }
+}
